@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Altas do Dia · EUA & Brasil</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121821; --panel2:#18202b; --line:#232d3a;
+    --text:#e8edf3; --muted:#8a97a8; --up:#22c55e; --up-soft:rgba(34,197,94,.14);
+    --down:#ef4444; --accent:#60a5fa; --warn:#f59e0b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:15px}
+  a{color:var(--accent)}
+  .wrap{max-width:1040px;margin:0 auto;padding:24px 16px 60px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  h1{font-size:22px;margin:0;letter-spacing:-.02em}
+  h1 span{color:var(--up)}
+  .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  .btn{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font:inherit;font-size:14px;cursor:pointer}
+  .btn:hover{border-color:#3a4a5e}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#06101d;font-weight:600}
+  .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin:22px 0 14px}
+  .seg{display:inline-flex;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:4px;gap:2px}
+  .seg button{background:none;border:0;color:var(--muted);font:inherit;font-size:14px;padding:8px 14px;border-radius:9px;cursor:pointer;font-weight:500}
+  .seg button.on{background:var(--panel2);color:var(--text);box-shadow:0 0 0 1px var(--line)}
+  .tabs button{font-size:15px;padding:9px 18px}
+  .meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;color:var(--muted);font-size:13px}
+  .chip{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
+  label.tog{display:inline-flex;gap:6px;align-items:center;cursor:pointer}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--muted);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.04em;background:var(--panel2)}
+  tr:last-child td{border-bottom:0}
+  td.num,th.num{text-align:right;font-family:"JetBrains Mono",monospace;font-size:14px}
+  .rank{color:var(--muted);width:36px}
+  .tk{font-weight:700;letter-spacing:.01em}
+  .nm{color:var(--muted);font-size:13px;max-width:260px;overflow:hidden;text-overflow:ellipsis}
+  .pct{color:var(--up);font-weight:600}
+  .pct.neg{color:var(--down)}
+  .barcell{width:28%;min-width:120px}
+  .pbar{height:8px;border-radius:4px;background:var(--up-soft);position:relative;overflow:hidden}
+  .pbar i{position:absolute;left:0;top:0;bottom:0;background:var(--up);border-radius:4px}
+  .state{padding:40px 20px;text-align:center;color:var(--muted)}
+  .state b{color:var(--text)}
+  .progress{height:4px;background:var(--panel2);border-radius:2px;overflow:hidden;margin:14px auto 0;max-width:320px}
+  .progress i{display:block;height:100%;background:var(--accent);width:0;transition:width .2s}
+  .notice{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.35);color:#fcd34d;border-radius:12px;padding:10px 14px;font-size:13px;margin-bottom:12px}
+  footer{color:var(--muted);font-size:12px;margin-top:22px;line-height:1.6}
+  dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:0;max-width:480px;width:calc(100% - 32px)}
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+  .dlg{padding:22px}
+  .dlg h2{margin:0 0 6px;font-size:18px}
+  .field{margin:16px 0}
+  .field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+  .field input{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;font-family:"JetBrains Mono",monospace;font-size:13px}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px}
+  .row{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+  @media (max-width:640px){
+    .barcell,.hide-sm{display:none}
+    th,td{padding:10px 10px}
+    .nm{max-width:130px}
+    .seg button{padding:7px 10px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Altas <span>▲</span> do mercado</h1>
+      <div class="sub">As ações que mais subiram nos EUA e no Brasil</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" id="refresh" title="Buscar dados de novo">↻ Atualizar</button>
+      <button class="btn" id="openSettings">⚙️ Configurações</button>
+    </div>
+  </header>
+
+  <div class="bar">
+    <div class="seg tabs" id="tabs">
+      <button data-m="us" class="on">🇺🇸 EUA</button>
+      <button data-m="br">🇧🇷 Brasil</button>
+    </div>
+    <div class="seg" id="periods">
+      <button data-p="d" class="on">Dia</button>
+      <button data-p="w">Semana</button>
+      <button data-p="m">Mês</button>
+      <button data-p="y">Ano</button>
+    </div>
+  </div>
+
+  <div class="meta" style="margin-bottom:12px">
+    <span class="chip" id="universe">—</span>
+    <span id="updated"></span>
+    <label class="tog" id="filterWrap"><input type="checkbox" id="filter" checked> <span id="filterLabel">Ocultar ações abaixo de US$ 1</span></label>
+  </div>
+
+  <div id="notice"></div>
+  <div class="card" id="out"></div>
+
+  <footer>
+    Dados: <a href="https://site.financialmodelingprep.com" target="_blank" rel="noopener">Financial Modeling Prep</a> (EUA, fim de dia no plano grátis) e
+    <a href="https://brapi.dev" target="_blank" rel="noopener">brapi.dev</a> (B3, ~30 min de atraso no plano grátis).
+    Semana = 7 dias corridos, Mês = 1 mês, Ano = 12 meses. Os resultados ficam guardados neste navegador e são buscados uma vez por dia para economizar a cota das APIs.<br>
+    Uso informativo. Não é recomendação de investimento.
+  </footer>
+</div>
+
+<dialog id="settings">
+  <form class="dlg" method="dialog" id="settingsForm">
+    <h2>Chaves das APIs</h2>
+    <div class="sub">Ficam guardadas só neste navegador. Não vão para o GitHub.</div>
+    <div class="field">
+      <label for="kFmp">Financial Modeling Prep (EUA)</label>
+      <input id="kFmp" autocomplete="off" spellcheck="false" placeholder="cole a API Key aqui">
+      <div class="hint">financialmodelingprep.com → Dashboard → API Key</div>
+    </div>
+    <div class="field">
+      <label for="kBrapi">brapi.dev (Brasil)</label>
+      <input id="kBrapi" autocomplete="off" spellcheck="false" placeholder="cole o token aqui">
+      <div class="hint">brapi.dev → Dashboard → token</div>
+    </div>
+    <div class="row">
+      <button class="btn" value="cancel" type="button" id="cancelSettings">Cancelar</button>
+      <button class="btn primary" value="ok" id="saveSettings">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(() => {
+/* ---------- Universos (empresas grandes) para Semana/Mês/Ano ---------- */
+const US_UNIVERSE = ["AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","AVGO","BRK-B","JPM","LLY","V","UNH","XOM","MA","JNJ","PG","HD","COST","ABBV","MRK","ORCL","CVX","WMT","NFLX","KO","PEP","BAC","AMD","CRM","ADBE","TMO","LIN","MCD","CSCO","ACN","ABT","WFC","DIS","INTU","TXN","QCOM","DHR","CAT","AMGN","IBM","GE","PM","VZ","NOW","ISRG","UBER","PFE","CMCSA","SPGI","GS","AMAT","UNP","T","LOW","RTX","HON","NKE","BKNG","PLTR","MU","BLK","SBUX","LRCX","ADI","GILD","MDT","PANW","DE","TJX","SCHW","KLAC","ANET","COIN","SHOP","CRWD","MSTR"];
+const BR_UNIVERSE = ["PETR4","VALE3","ITUB4","BBDC4","BBAS3","B3SA3","ABEV3","WEGE3","ITSA4","RENT3","SUZB3","PRIO3","BPAC11","AXIA3","EQTL3","RADL3","RDOR3","GGBR4","JBSS3","VBBR3","RAIL3","CMIG4","SBSP3","UGPA3","LREN3","HAPV3","CSAN3","BBSE3","KLBN11","TOTS3","VIVT3","TIMS3","CPLE3","ENEV3","EMBJ3","MBRF3","MOTV3","MGLU3","HYPE3","GOAU4","CSNA3","USIM5","BRAP4","CMIN3","ASAI3","NATU3","AZZA3","COGN3","YDUQ3","MULT3","ALOS3","CYRE3","MRVE3","DIRR3","CURY3","CVCB3","SMTO3","SLCE3","BEEF3","RECV3","BRAV3","CXSE3","PSSA3","IRBR3","SANB11","TAEE11","EGIE3","CPFE3","ENGI11","AURE3","STBP3","POMO4","VAMO3","SMFT3","FLRY3","ODPV3","MOVI3","IGTI11","LWSA3","CASH3","BBDC3","PETR3"];
+
+const PERIOD_LABEL = {d:"Dia", w:"Semana", m:"Mês", y:"Ano"};
+const $ = s => document.querySelector(s);
+const store = {
+  get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+};
+const state = {
+  market: store.get("ad:market") || "us",
+  period: store.get("ad:period") || "d",
+  filter: store.get("ad:filter") ?? true,
+  busy: false
+};
+const keys = () => ({ fmp: store.get("ad:key:fmp") || "", brapi: store.get("ad:key:brapi") || "" });
+const today = () => new Date().toISOString().slice(0,10);
+const fmtPct = v => (v>0?"+":"") + v.toFixed(2).replace(".",",") + "%";
+const fmtPrice = (v,cur) => v==null ? "—" : (cur==="BRL"?"R$ ":"US$ ") + v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtVol = v => v==null ? "—" : v>=1e9 ? (v/1e9).toFixed(1).replace(".",",")+" bi" : v>=1e6 ? (v/1e6).toFixed(1).replace(".",",")+" mi" : v>=1e3 ? (v/1e3).toFixed(0)+" mil" : String(v);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+class ApiError extends Error { constructor(msg, status){ super(msg); this.status = status; } }
+async function getJSON(url){
+  let r;
+  try { r = await fetch(url); }
+  catch(e){ throw new ApiError("Não foi possível conectar à API (rede ou bloqueio do navegador).", 0); }
+  let body = null; try { body = await r.json(); } catch(e){}
+  if(!r.ok){
+    const msg = (body && (body.message || body["Error Message"] || body.error)) || ("HTTP " + r.status);
+    throw new ApiError(String(msg), r.status);
+  }
+  if(body && body["Error Message"]) throw new ApiError(body["Error Message"], 402);
+  return body;
+}
+
+/* Variação a partir de uma série [{t: ms, c: close}] em ordem crescente */
+function changesFromSeries(series){
+  if(!series || series.length < 2) return null;
+  const last = series[series.length-1];
+  const prev = series[series.length-2];
+  const at = (ms) => { let pick=null; for(const p of series){ if(p.t <= ms) pick = p; else break; } return pick; };
+  const d0 = new Date(last.t);
+  const back = (fn) => { const d = new Date(d0); fn(d); return d.getTime(); };
+  const pct = (p) => p && p.c ? (last.c/p.c - 1)*100 : null;
+  const first = series[0];
+  const yRef = at(back(d=>d.setFullYear(d.getFullYear()-1)));
+  return {
+    price: last.c,
+    d: pct(prev),
+    w: pct(at(back(d=>d.setDate(d.getDate()-7)))),
+    m: pct(at(back(d=>d.setMonth(d.getMonth()-1)))),
+    // só calcula o ano se a série realmente cobre 12 meses
+    y: (yRef && first.t <= back(d=>{d.setFullYear(d.getFullYear()-1); d.setDate(d.getDate()+5);})) ? pct(yRef) : null,
+    asOf: last.t
+  };
+}
+
+async function pool(items, worker, conc, onTick){
+  let i = 0, done = 0;
+  const runners = Array.from({length: conc}, async () => {
+    while(i < items.length){
+      const idx = i++;
+      try { await worker(items[idx]); } catch(e){ if(e && e.fatal) throw e; }
+      done++; onTick && onTick(done, items.length);
+    }
+  });
+  await Promise.all(runners);
+}
+
+/* ---------------- EUA (FMP) ---------------- */
+async function usDay(key){
+  const data = await getJSON(`https://financialmodelingprep.com/stable/biggest-gainers?apikey=${encodeURIComponent(key)}`);
+  if(!Array.isArray(data)) throw new ApiError("Resposta inesperada da FMP.", 0);
+  return data.map(x => ({
+    tk: x.symbol, name: x.name, price: x.price, pct: x.changesPercentage ?? x.changePercentage,
+    vol: null, exch: x.exchange
+  }));
+}
+async function usMulti(key, onTick){
+  const ck = `ad:cache:us:${today()}`;
+  const cached = store.get(ck);
+  if(cached) return cached;
+  const from = new Date(Date.now() - 400*864e5).toISOString().slice(0,10);
+  const rows = {};
+  let useFallback = false, fatal = null;
+  await pool(US_UNIVERSE, async (tk) => {
+    try{
+      if(!useFallback){
+        const d = await getJSON(`https://financialmodelingprep.com/stable/historical-price-eod/light?symbol=${tk}&from=${from}&apikey=${encodeURIComponent(key)}`);
+        const arr = Array.isArray(d) ? d : (d && d.historical) || [];
+        const series = arr.map(p => ({t: Date.parse(p.date), c: p.price ?? p.close})).filter(p=>p.c).sort((a,b)=>a.t-b.t);
+        const ch = changesFromSeries(series);
+        if(ch) rows[tk] = {...ch, name: tk};
+        return;
+      }
+    }catch(e){
+      if(e.status===401){ fatal = e; e.fatal = true; throw e; }
+      if(e.status===402 || e.status===403) useFallback = true; else throw e;
+    }
+    // Plano B: variação pronta por período
+    const p = await getJSON(`https://financialmodelingprep.com/stable/stock-price-change?symbol=${tk}&apikey=${encodeURIComponent(key)}`);
+    const o = Array.isArray(p) ? p[0] : p;
+    if(o) rows[tk] = {price:null, name: tk, d:o["1D"], w:o["5D"], m:o["1M"], y:o["1Y"], asOf: Date.now()};
+  }, 4, onTick);
+  if(fatal) throw fatal;
+  const out = {ts: Date.now(), rows};
+  if(Object.keys(rows).length > 10) store.set(ck, out);
+  pruneCache("us");
+  return out;
+}
+
+/* ---------------- Brasil (brapi) ---------------- */
+async function brDay(key){
+  const d = await getJSON(`https://brapi.dev/api/quote/list?sortBy=change&sortOrder=desc&limit=150&type=stock&token=${encodeURIComponent(key)}`);
+  const arr = (d && d.stocks) || [];
+  return arr.map(x => ({tk: x.stock, name: x.name, price: x.close, pct: x.change, vol: x.volume}));
+}
+async function brMulti(key, onTick){
+  const ck = `ad:cache:br:${today()}`;
+  const cached = store.get(ck);
+  if(cached) return cached;
+  // descobre se o plano permite 1 ano de histórico
+  let range = "1y", yearOk = true;
+  try { await getJSON(`https://brapi.dev/api/quote/PETR4?range=1y&interval=1d&token=${encodeURIComponent(key)}`); }
+  catch(e){
+    if(e.status===401) throw e;
+    range = "3mo"; yearOk = false;
+  }
+  const rows = {};
+  let fatal = null;
+  await pool(BR_UNIVERSE, async (tk) => {
+    try{
+      const d = await getJSON(`https://brapi.dev/api/quote/${tk}?range=${range}&interval=1d&token=${encodeURIComponent(key)}`);
+      const r = d && d.results && d.results[0];
+      if(!r) return;
+      const series = (r.historicalDataPrice||[]).map(p=>({t:p.date*1000, c:p.close})).filter(p=>p.c).sort((a,b)=>a.t-b.t);
+      const ch = changesFromSeries(series) || {};
+      rows[tk] = {
+        name: r.longName || r.shortName || tk,
+        price: r.regularMarketPrice ?? ch.price,
+        d: r.regularMarketChangePercent ?? ch.d,
+        w: ch.w, m: ch.m, y: yearOk ? ch.y : null,
+        vol: r.regularMarketVolume, asOf: ch.asOf
+      };
+    }catch(e){ if(e.status===401){ fatal=e; e.fatal=true; throw e; } }
+  }, 3, onTick);
+  if(fatal) throw fatal;
+  const out = {ts: Date.now(), rows, yearOk};
+  if(Object.keys(rows).length > 10) store.set(ck, out);
+  pruneCache("br");
+  return out;
+}
+
+function pruneCache(mkt){
+  try{
+    const keep = `ad:cache:${mkt}:${today()}`;
+    Object.keys(localStorage).filter(k => k.startsWith(`ad:cache:${mkt}:`) && k!==keep).forEach(k=>localStorage.removeItem(k));
+  }catch(e){}
+}
+
+/* ---------------- Render ---------------- */
+function renderState(html){ $("#out").innerHTML = `<div class="state">${html}</div>`; }
+function renderProgress(done, total){
+  renderState(`Buscando dados… <b>${done}</b> de ${total} ações<div class="progress"><i style="width:${Math.round(done/total*100)}%"></i></div>
+  <div class="hint" style="margin-top:10px">Isso acontece uma vez por dia. Depois fica guardado.</div>`);
+}
+
+function renderTable(rows, cur, showVol){
+  if(!rows.length){ renderState("Nenhuma ação encontrada para esse filtro."); return; }
+  const max = Math.max(...rows.map(r=>Math.abs(r.pct)||0), 1);
+  const html = `<table>
+    <thead><tr><th class="rank">#</th><th>Ação</th><th class="num">Preço</th><th class="num">Variação</th>${showVol?'<th class="num hide-sm">Volume</th>':''}<th class="barcell"></th></tr></thead>
+    <tbody>${rows.map((r,i)=>`<tr>
+      <td class="rank">${i+1}</td>
+      <td><div class="tk">${esc(r.tk)}</div><div class="nm" title="${esc(r.name)}">${esc(r.name && r.name!==r.tk ? r.name : "")}</div></td>
+      <td class="num">${fmtPrice(r.price, cur)}</td>
+      <td class="num pct ${r.pct<0?'neg':''}">${fmtPct(r.pct)}</td>
+      ${showVol?`<td class="num hide-sm">${fmtVol(r.vol)}</td>`:''}
+      <td class="barcell"><div class="pbar"><i style="width:${Math.max(2, Math.abs(r.pct)/max*100)}%;${r.pct<0?'background:var(--down)':''}"></i></div></td>
+    </tr>`).join("")}</tbody></table>`;
+  $("#out").innerHTML = html;
+}
+
+function syncUI(){
+  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.m===state.market));
+  document.querySelectorAll("#periods button").forEach(b=>b.classList.toggle("on", b.dataset.p===state.period));
+  const isDay = state.period==="d";
+  $("#universe").textContent = state.market==="us"
+    ? (isDay ? "Mercado americano inteiro (NYSE, Nasdaq)" : `${US_UNIVERSE.length} maiores empresas dos EUA`)
+    : (isDay ? "Todas as ações da B3" : `${BR_UNIVERSE.length} principais ações da B3 (Ibovespa)`);
+  $("#filterLabel").textContent = state.market==="us" ? "Ocultar ações abaixo de US$ 1 e fora da NYSE/Nasdaq" : "Ocultar ações com pouco volume (< 100 mil)";
+  $("#filterWrap").style.display = isDay ? "" : "none";
+  $("#filter").checked = !!state.filter;
+}
+
+let runId = 0;
+async function load(force){
+  const my = ++runId;
+  syncUI();
+  $("#notice").innerHTML = "";
+  $("#updated").textContent = "";
+  const k = keys();
+  const mkt = state.market, per = state.period;
+  const key = mkt==="us" ? k.fmp : k.brapi;
+  if(!key){
+    renderState(`Falta a chave ${mkt==="us"?"da <b>Financial Modeling Prep</b>":"da <b>brapi.dev</b>"}.<br><br><button class="btn primary" onclick="document.getElementById('openSettings').click()">⚙️ Colar chave</button>`);
+    return;
+  }
+  if(force){
+    store.del(`ad:cache:${mkt}:${today()}`);
+    store.del(`ad:day:${mkt}`);
+  }
+  try{
+    let rows, cur = mkt==="us" ? "USD" : "BRL", ts;
+    if(per==="d"){
+      const dk = `ad:day:${mkt}`;
+      let cached = store.get(dk);
+      // lista do dia fica guardada por 10 minutos
+      if(!cached || Date.now()-cached.ts > 10*60e3){
+        renderState("Buscando as maiores altas de hoje…");
+        const list = mkt==="us" ? await usDay(key) : await brDay(key);
+        cached = {ts: Date.now(), list};
+        store.set(dk, cached);
+      }
+      if(my!==runId) return;
+      rows = cached.list.filter(r => typeof r.pct === "number");
+      if(state.filter){
+        rows = mkt==="us"
+          ? rows.filter(r => (r.price||0) >= 1 && /NASDAQ|NYSE|AMEX/i.test(r.exch||"NASDAQ"))
+          : rows.filter(r => (r.vol||0) >= 100000);
+      }
+      ts = cached.ts;
+    } else {
+      renderProgress(0, (mkt==="us"?US_UNIVERSE:BR_UNIVERSE).length);
+      const data = mkt==="us"
+        ? await usMulti(key, (d,t)=>{ if(my===runId) renderProgress(d,t); })
+        : await brMulti(key, (d,t)=>{ if(my===runId) renderProgress(d,t); });
+      if(my!==runId) return;
+      if(mkt==="br" && per==="y" && !data.yearOk){
+        $("#notice").innerHTML = `<div class="notice">O plano grátis da brapi só traz 3 meses de histórico, então o ranking de <b>1 ano</b> no Brasil não está disponível. Dia, Semana e Mês funcionam normalmente.</div>`;
+        renderState("Ranking anual indisponível no plano gratuito da brapi.");
+        $("#updated").textContent = "";
+        return;
+      }
+      rows = Object.entries(data.rows)
+        .map(([tk,r]) => ({tk, name:r.name, price:r.price, pct:r[per], vol:r.vol}))
+        .filter(r => typeof r.pct === "number" && isFinite(r.pct));
+      ts = data.ts;
+    }
+    rows.sort((a,b)=>b.pct-a.pct);
+    rows = rows.slice(0, 50);
+    renderTable(rows, cur, per==="d" ? mkt==="br" : mkt==="br");
+    const t = new Date(ts);
+    $("#updated").textContent = `${PERIOD_LABEL[per]} · atualizado às ${t.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})} de ${t.toLocaleDateString("pt-BR")}`;
+  }catch(e){
+    if(my!==runId) return;
+    const prov = mkt==="us" ? "Financial Modeling Prep" : "brapi.dev";
+    let msg = esc(e.message||e);
+    if(e.status===401) msg = `A chave da <b>${prov}</b> foi recusada. Confira se colou certinho em ⚙️ Configurações.`;
+    else if(e.status===429) msg = `Limite de consultas da <b>${prov}</b> atingido por hoje. Tente de novo mais tarde.`;
+    else if(e.status===402 || e.status===403) msg = `O plano gratuito da <b>${prov}</b> não libera esse dado.<br><span class="hint">Detalhe: ${msg}</span>`;
+    renderState(`⚠️ ${msg}`);
+  }
+}
+
+/* ---------------- Eventos ---------------- */
+document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>{ if(state.market===b.dataset.m) return; state.market=b.dataset.m; store.set("ad:market",state.market); load(); });
+document.querySelectorAll("#periods button").forEach(b=>b.onclick=()=>{ if(state.period===b.dataset.p) return; state.period=b.dataset.p; store.set("ad:period",state.period); load(); });
+$("#filter").onchange = e => { state.filter = e.target.checked; store.set("ad:filter", state.filter); load(); };
+$("#refresh").onclick = () => load(true);
+
+const dlg = $("#settings");
+$("#openSettings").onclick = () => { const k = keys(); $("#kFmp").value=k.fmp; $("#kBrapi").value=k.brapi; dlg.showModal(); };
+$("#cancelSettings").onclick = () => dlg.close();
+$("#settingsForm").onsubmit = (e) => {
+  e.preventDefault();
+  const f = $("#kFmp").value.trim(), b = $("#kBrapi").value.trim();
+  const old = keys();
+  f ? store.set("ad:key:fmp", f) : store.del("ad:key:fmp");
+  b ? store.set("ad:key:brapi", b) : store.del("ad:key:brapi");
+  if(f!==old.fmp){ store.del("ad:day:us"); store.del(`ad:cache:us:${today()}`); }
+  if(b!==old.brapi){ store.del("ad:day:br"); store.del(`ad:cache:br:${today()}`); }
+  dlg.close(); load();
+};
+
+load();
+})();
+</script>
+</body>
+</html>
