@@ -184,7 +184,10 @@ async function getJSON(url, tries=3){
       throw new ApiError("Não foi possível conectar à API (rede ou bloqueio do navegador).", 0);
     }
     let body = null; try { body = await r.json(); } catch(e){}
-    if(r.status===429 && attempt < tries-1){ await sleep(2500*(attempt+1)); continue; }
+    if(r.status===429 && attempt < tries-1 && !(body && /limit reach/i.test(body["Error Message"]||""))){ await sleep(2500*(attempt+1)); continue; }
+    const em = body && body["Error Message"];
+    if(em && /limit reach/i.test(em)) throw new ApiError(em, 429);
+    if(em && /invalid api key/i.test(em)) throw new ApiError(em, 401);
     if(!r.ok){
       const msg = (body && (body.message || body["Error Message"] || body.error)) || ("HTTP " + r.status);
       throw new ApiError(String(msg), r.status);
@@ -240,7 +243,10 @@ async function loadUniverse(mkt, universe, fetchOne, conc, onTick, extra){
   const ck = `ad:cache:${mkt}:${today()}`;
   const cache = store.get(ck) || {ts: Date.now(), rows:{}, fails:{}, ...(extra||{})};
   cache.fails = cache.fails || {};
-  const missing = universe.filter(tk => !cache.rows[tk] && cache.fails[tk] !== "não encontrada");
+  const blocked = store.get(`ad:blocked:${mkt}`) || {};
+  universe.forEach(tk => { if(blocked[tk] && !cache.rows[tk]) cache.fails[tk] = "plano"; });
+  // não gasta cota tentando de novo ações que o plano não libera ou que não existem
+  const missing = universe.filter(tk => !cache.rows[tk] && cache.fails[tk] !== "não encontrada" && cache.fails[tk] !== "plano");
   if(missing.length){
     const fails = {};
     try{
@@ -256,6 +262,8 @@ async function loadUniverse(mkt, universe, fetchOne, conc, onTick, extra){
       }, conc, (d)=>onTick && onTick(universe.length - missing.length + d, universe.length));
     } finally {
       Object.assign(cache.fails, fails);
+      Object.entries(fails).forEach(([tk,r]) => { if(r==="plano") blocked[tk] = 1; });
+      store.set(`ad:blocked:${mkt}`, blocked);
       cache.ts = Date.now();
       store.set(ck, cache);
       pruneCache(mkt);
@@ -274,28 +282,13 @@ async function usDay(key){
   }));
 }
 async function usMulti(key, onTick){
-  const from = new Date(Date.now() - 400*864e5).toISOString().slice(0,10);
   const k = encodeURIComponent(key);
+  // No plano grátis, "Stock Price Change" libera ~207 ações; o gráfico diário, só ~87. Usa o primeiro (1 consulta por ação).
   return loadUniverse("us", US_UNIVERSE, async (tk) => {
-    let firstErr = null;
-    try{
-      const d = await getJSON(`https://financialmodelingprep.com/stable/historical-price-eod/light?symbol=${tk}&from=${from}&apikey=${k}`);
-      const arr = Array.isArray(d) ? d : (d && d.historical) || [];
-      const series = arr.map(p => ({t: Date.parse(p.date), c: p.price ?? p.close})).filter(p=>p.c).sort((a,b)=>a.t-b.t);
-      const ch = changesFromSeries(series);
-      if(ch) return {...ch, name: US_NAMES[tk] || tk};
-    }catch(e){
-      if(e.status===401 || e.status===429) throw e;
-      firstErr = e;
-    }
-    // Plano B: variação pronta por período
-    try{
-      const p = await getJSON(`https://financialmodelingprep.com/stable/stock-price-change?symbol=${tk}&apikey=${k}`);
-      const o = Array.isArray(p) ? p[0] : p;
-      if(o) return {price:null, name: US_NAMES[tk] || tk, d:o["1D"], w:o["5D"], m:o["1M"], y:o["1Y"], asOf: Date.now()};
-    }catch(e){ throw firstErr || e; }
-    if(firstErr) throw firstErr;
-    return null;
+    const p = await getJSON(`https://financialmodelingprep.com/stable/stock-price-change?symbol=${tk}&apikey=${k}`);
+    const o = Array.isArray(p) ? p[0] : p;
+    if(!o || o["1D"] == null) return null;
+    return {price:null, name: US_NAMES[tk] || tk, d:o["1D"], w:o["5D"], m:o["1M"], y:o["1Y"], asOf: Date.now()};
   }, 2, onTick);
 }
 
@@ -414,7 +407,7 @@ function renderMap(rows, cur){
       title="${esc(r.tk)} · ${esc(r.name||"")} · ${fmtPct(r.pct)} · ${(r.pct/total*100).toFixed(1).replace(".",",")}% da tela">
       <span class="t-rank">#${i+1}</span>
       <div><div class="t-tk" style="font-size:${Math.max(11,fs*0.7)}px">${esc(r.tk)}</div><div class="t-nm">${esc(r.name && r.name!==r.tk ? r.name : "")}</div></div>
-      <div><div class="t-pct" style="font-size:${fs}px">${fmtPct(r.pct)}</div><div class="t-px">${fmtPrice(r.price, cur)}</div></div>
+      <div><div class="t-pct" style="font-size:${fs}px">${fmtPct(r.pct)}</div>${r.price==null?"":`<div class="t-px">${fmtPrice(r.price, cur)}</div>`}</div>
     </div>`;}).join("")}</div>`;
 }
 let rzT; window.addEventListener("resize", ()=>{ clearTimeout(rzT); rzT=setTimeout(()=>{ if(state.view==="map" && lastMap && $("#out .tm")) renderMap(lastMap.rows, lastMap.cur); },150); });
@@ -512,7 +505,8 @@ async function load(force){
     const prov = mkt==="us" ? "Financial Modeling Prep" : "brapi.dev";
     let msg = esc(e.message||e);
     if(e.status===401) msg = `A chave da <b>${prov}</b> foi recusada. Confira se colou certinho em ⚙️ Configurações.`;
-    else if(e.status===429) msg = `Limite de consultas da <b>${prov}</b> atingido por hoje. Tente de novo mais tarde.`;
+    else if(e.status===429) msg = mkt==="us" ? `O limite diário grátis da <b>FMP</b> (250 consultas) acabou. Ele zera à meia-noite (horário de Nova York); amanhã volta a funcionar.` : `Limite de consultas da <b>${prov}</b> atingido. Tente de novo mais tarde.`;
+    else if(e.status===0) msg = `Não consegui falar com a <b>${prov}</b>. Pode ser a rede, um bloqueador de anúncios ou a rede da empresa bloqueando o site.<br><span class="hint">Detalhe: ${msg}</span>`;
     else if(e.status===402 || e.status===403) msg = `O plano gratuito da <b>${prov}</b> não libera esse dado.<br><span class="hint">Detalhe: ${msg}</span>`;
     renderState(`⚠️ ${msg}`);
   }
