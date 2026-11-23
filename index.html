@@ -31,6 +31,18 @@
   .meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;color:var(--muted);font-size:13px}
   .chip{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 10px}
   label.tog{display:inline-flex;gap:6px;align-items:center;cursor:pointer}
+  .tm{position:relative;width:100%;background:var(--bg)}
+  .tile{position:absolute;overflow:hidden;border-radius:8px;padding:10px 11px;display:flex;flex-direction:column;justify-content:space-between;color:#eafff1;border:2px solid var(--bg);transition:filter .15s}
+  .tile:hover{filter:brightness(1.15)}
+  .tile .t-tk{font-weight:700;letter-spacing:.01em;line-height:1.1}
+  .tile .t-nm{opacity:.8;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .tile .t-pct{font-family:"JetBrains Mono",monospace;font-weight:700;line-height:1}
+  .tile .t-px{opacity:.8;font-size:12px;font-family:"JetBrains Mono",monospace;margin-top:4px}
+  .tile .t-rank{position:absolute;top:8px;right:10px;font-size:11px;opacity:.6}
+  .tile.sm{padding:5px 6px;justify-content:center;align-items:center;text-align:center}
+  .tile.sm .t-nm,.tile.sm .t-px,.tile.sm .t-rank{display:none}
+  .tile.xs .t-pct{display:none}
+  .card.map{background:none;border:0;border-radius:0}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
   table{width:100%;border-collapse:collapse}
   th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -95,6 +107,7 @@
   </div>
 
   <div class="meta" style="margin-bottom:12px">
+    <span class="seg" id="views" style="padding:3px"><button data-v="map" class="on" style="padding:5px 10px;font-size:13px">▦ Mapa</button><button data-v="list" style="padding:5px 10px;font-size:13px">☰ Lista</button></span>
     <span class="chip" id="universe">—</span>
     <span id="updated"></span>
     <label class="tog" id="filterWrap"><input type="checkbox" id="filter" checked> <span id="filterLabel">Ocultar ações abaixo de US$ 1</span></label>
@@ -150,6 +163,7 @@ const state = {
   market: store.get("ad:market") || "us",
   period: store.get("ad:period") || "d",
   filter: store.get("ad:filter") ?? true,
+  view: store.get("ad:view") || "map",
   busy: false
 };
 const keys = () => ({ fmp: store.get("ad:key:fmp") || "", brapi: store.get("ad:key:brapi") || "" });
@@ -337,15 +351,78 @@ function coverageNotice(data, universe, prov){
 }
 
 /* ---------------- Render ---------------- */
-function renderState(html){ $("#out").innerHTML = `<div class="state">${html}</div>`; }
+function renderState(html){ $("#out").classList.remove("map"); $("#out").innerHTML = `<div class="state">${html}</div>`; }
 function renderProgress(done, total){
   renderState(`Buscando dados… <b>${done}</b> de ${total} ações<div class="progress"><i style="width:${Math.round(done/total*100)}%"></i></div>
   <div class="hint" style="margin-top:10px">Isso acontece uma vez por dia. Depois fica guardado.</div>`);
 }
 
+/* ---------- Treemap (algoritmo "squarified") ---------- */
+function squarify(values, x, y, w, h){
+  const total = values.reduce((a,b)=>a+b,0);
+  const area = w*h;
+  const items = values.map((v,i)=>({i, a: v/total*area}));
+  const out = [];
+  let row = [];
+  const worst = (r, side) => {
+    const s = r.reduce((a,b)=>a+b.a,0);
+    let mx=-Infinity, mn=Infinity; r.forEach(o=>{mx=Math.max(mx,o.a); mn=Math.min(mn,o.a);});
+    return Math.max(side*side*mx/(s*s), (s*s)/(side*side*mn));
+  };
+  const layoutRow = (r) => {
+    const s = r.reduce((a,b)=>a+b.a,0);
+    if(w >= h){ // coluna à esquerda
+      const cw = s/h; let cy = y;
+      r.forEach(o=>{ const ch = o.a/cw; out[o.i]={x, y:cy, w:cw, h:ch}; cy+=ch; });
+      x += cw; w -= cw;
+    } else { // linha no topo
+      const rh = s/w; let cx = x;
+      r.forEach(o=>{ const cw = o.a/rh; out[o.i]={x:cx, y, w:cw, h:rh}; cx+=cw; });
+      y += rh; h -= rh;
+    }
+  };
+  for(const it of items){
+    const side = Math.min(w,h);
+    if(!row.length || worst(row.concat(it), side) <= worst(row, side)) row.push(it);
+    else { layoutRow(row); row=[it]; }
+  }
+  if(row.length) layoutRow(row);
+  return out;
+}
+
+let lastMap = null;
+function renderMap(rows, cur){
+  lastMap = {rows, cur};
+  rows = rows.filter(r => r.pct > 0).slice(0, 25);
+  if(!rows.length){ renderState("Nenhuma alta nesse período."); return; }
+  const out = $("#out");
+  out.classList.add("map");
+  const W = out.clientWidth || 1000;
+  const top = out.getBoundingClientRect().top + window.scrollY;
+  const H = Math.max(420, window.innerHeight - (top - window.scrollY) - 16);
+  const rects = squarify(rows.map(r=>r.pct), 0, 0, W, H);
+  const max = rows[0].pct, min = rows[rows.length-1].pct;
+  const total = rows.reduce((a,b)=>a+b.pct,0);
+  out.innerHTML = `<div class="tm" style="height:${H}px">${rows.map((r,i)=>{
+    const q = rects[i];
+    const k = max===min ? 1 : (r.pct-min)/(max-min);           // 0..1
+    const bg = `hsl(142, ${45+25*k}%, ${17+15*k}%)`;
+    const minSide = Math.min(q.w, q.h);
+    const cls = minSide < 46 || q.w < 70 ? (minSide < 30 ? "sm xs" : "sm") : "";
+    const fs = Math.max(11, Math.min(34, Math.sqrt(q.w*q.h)/6));
+    return `<div class="tile ${cls}" style="left:${q.x}px;top:${q.y}px;width:${q.w}px;height:${q.h}px;background:${bg}"
+      title="${esc(r.tk)} · ${esc(r.name||"")} · ${fmtPct(r.pct)} · ${(r.pct/total*100).toFixed(1).replace(".",",")}% da tela">
+      <span class="t-rank">#${i+1}</span>
+      <div><div class="t-tk" style="font-size:${Math.max(11,fs*0.7)}px">${esc(r.tk)}</div><div class="t-nm">${esc(r.name && r.name!==r.tk ? r.name : "")}</div></div>
+      <div><div class="t-pct" style="font-size:${fs}px">${fmtPct(r.pct)}</div><div class="t-px">${fmtPrice(r.price, cur)}</div></div>
+    </div>`;}).join("")}</div>`;
+}
+let rzT; window.addEventListener("resize", ()=>{ clearTimeout(rzT); rzT=setTimeout(()=>{ if(state.view==="map" && lastMap && $("#out .tm")) renderMap(lastMap.rows, lastMap.cur); },150); });
+
 function renderTable(rows, cur, showVol){
   if(!rows.length){ renderState("Nenhuma ação encontrada para esse filtro."); return; }
   const max = Math.max(...rows.map(r=>Math.abs(r.pct)||0), 1);
+  $("#out").classList.remove("map");
   const html = `<table>
     <thead><tr><th class="rank">#</th><th>Ação</th><th class="num">Preço</th><th class="num">Variação</th>${showVol?'<th class="num hide-sm">Volume</th>':''}<th class="barcell"></th></tr></thead>
     <tbody>${rows.map((r,i)=>`<tr>
@@ -362,6 +439,7 @@ function renderTable(rows, cur, showVol){
 function syncUI(){
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.m===state.market));
   document.querySelectorAll("#periods button").forEach(b=>b.classList.toggle("on", b.dataset.p===state.period));
+  document.querySelectorAll("#views button").forEach(b=>b.classList.toggle("on", b.dataset.v===state.view));
   const isDay = state.period==="d";
   $("#universe").textContent = state.market==="us"
     ? (isDay ? "Mercado americano inteiro (NYSE, Nasdaq)" : `${US_UNIVERSE.length} maiores empresas dos EUA`)
@@ -425,8 +503,8 @@ async function load(force){
       ts = data.ts;
     }
     rows.sort((a,b)=>b.pct-a.pct);
-    rows = rows.slice(0, 50);
-    renderTable(rows, cur, per==="d" ? mkt==="br" : mkt==="br");
+    if(state.view==="map") renderMap(rows, cur);
+    else renderTable(rows.slice(0, 50), cur, mkt==="br");
     const t = new Date(ts);
     $("#updated").textContent = `${PERIOD_LABEL[per]} · atualizado às ${t.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})} de ${t.toLocaleDateString("pt-BR")}`;
   }catch(e){
@@ -443,6 +521,7 @@ async function load(force){
 /* ---------------- Eventos ---------------- */
 document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>{ if(state.market===b.dataset.m) return; state.market=b.dataset.m; store.set("ad:market",state.market); load(); });
 document.querySelectorAll("#periods button").forEach(b=>b.onclick=()=>{ if(state.period===b.dataset.p) return; state.period=b.dataset.p; store.set("ad:period",state.period); load(); });
+document.querySelectorAll("#views button").forEach(b=>b.onclick=()=>{ if(state.view===b.dataset.v) return; state.view=b.dataset.v; store.set("ad:view",state.view); load(); });
 $("#filter").onchange = e => { state.filter = e.target.checked; store.set("ad:filter", state.filter); load(); };
 $("#refresh").onclick = () => load(true);
 
