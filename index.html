@@ -138,6 +138,7 @@
 const US_UNIVERSE = ["AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","AVGO","BRK-B","JPM","LLY","V","UNH","XOM","MA","JNJ","PG","HD","COST","ABBV","MRK","ORCL","CVX","WMT","NFLX","KO","PEP","BAC","AMD","CRM","ADBE","TMO","LIN","MCD","CSCO","ACN","ABT","WFC","DIS","INTU","TXN","QCOM","DHR","CAT","AMGN","IBM","GE","PM","VZ","NOW","ISRG","UBER","PFE","CMCSA","SPGI","GS","AMAT","UNP","T","LOW","RTX","HON","NKE","BKNG","PLTR","MU","BLK","SBUX","LRCX","ADI","GILD","MDT","PANW","DE","TJX","SCHW","KLAC","ANET","COIN","SHOP","CRWD","MSTR"];
 const BR_UNIVERSE = ["PETR4","VALE3","ITUB4","BBDC4","BBAS3","B3SA3","ABEV3","WEGE3","ITSA4","RENT3","SUZB3","PRIO3","BPAC11","AXIA3","EQTL3","RADL3","RDOR3","GGBR4","JBSS3","VBBR3","RAIL3","CMIG4","SBSP3","UGPA3","LREN3","HAPV3","CSAN3","BBSE3","KLBN11","TOTS3","VIVT3","TIMS3","CPLE3","ENEV3","EMBJ3","MBRF3","MOTV3","MGLU3","HYPE3","GOAU4","CSNA3","USIM5","BRAP4","CMIN3","ASAI3","NATU3","AZZA3","COGN3","YDUQ3","MULT3","ALOS3","CYRE3","MRVE3","DIRR3","CURY3","CVCB3","SMTO3","SLCE3","BEEF3","RECV3","BRAV3","CXSE3","PSSA3","IRBR3","SANB11","TAEE11","EGIE3","CPFE3","ENGI11","AURE3","STBP3","POMO4","VAMO3","SMFT3","FLRY3","ODPV3","MOVI3","IGTI11","LWSA3","CASH3","BBDC3","PETR3"];
 
+const US_NAMES = {AAPL:"Apple",MSFT:"Microsoft",NVDA:"Nvidia",AMZN:"Amazon",GOOGL:"Alphabet (Google)",META:"Meta",TSLA:"Tesla",AVGO:"Broadcom","BRK-B":"Berkshire Hathaway",JPM:"JPMorgan Chase",LLY:"Eli Lilly",V:"Visa",UNH:"UnitedHealth",XOM:"Exxon Mobil",MA:"Mastercard",JNJ:"Johnson & Johnson",PG:"Procter & Gamble",HD:"Home Depot",COST:"Costco",ABBV:"AbbVie",MRK:"Merck",ORCL:"Oracle",CVX:"Chevron",WMT:"Walmart",NFLX:"Netflix",KO:"Coca-Cola",PEP:"PepsiCo",BAC:"Bank of America",AMD:"AMD",CRM:"Salesforce",ADBE:"Adobe",TMO:"Thermo Fisher",LIN:"Linde",MCD:"McDonald's",CSCO:"Cisco",ACN:"Accenture",ABT:"Abbott",WFC:"Wells Fargo",DIS:"Disney",INTU:"Intuit",TXN:"Texas Instruments",QCOM:"Qualcomm",DHR:"Danaher",CAT:"Caterpillar",AMGN:"Amgen",IBM:"IBM",GE:"GE Aerospace",PM:"Philip Morris",VZ:"Verizon",NOW:"ServiceNow",ISRG:"Intuitive Surgical",UBER:"Uber",PFE:"Pfizer",CMCSA:"Comcast",SPGI:"S&P Global",GS:"Goldman Sachs",AMAT:"Applied Materials",UNP:"Union Pacific",T:"AT&T",LOW:"Lowe's",RTX:"RTX",HON:"Honeywell",NKE:"Nike",BKNG:"Booking",PLTR:"Palantir",MU:"Micron",BLK:"BlackRock",SBUX:"Starbucks",LRCX:"Lam Research",ADI:"Analog Devices",GILD:"Gilead",MDT:"Medtronic",PANW:"Palo Alto Networks",DE:"Deere",TJX:"TJX",SCHW:"Charles Schwab",KLAC:"KLA",ANET:"Arista Networks",COIN:"Coinbase",SHOP:"Shopify",CRWD:"CrowdStrike",MSTR:"Strategy"};
 const PERIOD_LABEL = {d:"Dia", w:"Semana", m:"Mês", y:"Ano"};
 const $ = s => document.querySelector(s);
 const store = {
@@ -159,17 +160,27 @@ const fmtVol = v => v==null ? "—" : v>=1e9 ? (v/1e9).toFixed(1).replace(".",",
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 class ApiError extends Error { constructor(msg, status){ super(msg); this.status = status; } }
-async function getJSON(url){
-  let r;
-  try { r = await fetch(url); }
-  catch(e){ throw new ApiError("Não foi possível conectar à API (rede ou bloqueio do navegador).", 0); }
-  let body = null; try { body = await r.json(); } catch(e){}
-  if(!r.ok){
-    const msg = (body && (body.message || body["Error Message"] || body.error)) || ("HTTP " + r.status);
-    throw new ApiError(String(msg), r.status);
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+async function getJSON(url, tries=3){
+  for(let attempt=0; ; attempt++){
+    let r;
+    try { r = await fetch(url); }
+    catch(e){
+      if(attempt < tries-1){ await sleep(1500*(attempt+1)); continue; }
+      throw new ApiError("Não foi possível conectar à API (rede ou bloqueio do navegador).", 0);
+    }
+    let body = null; try { body = await r.json(); } catch(e){}
+    if(r.status===429 && attempt < tries-1){ await sleep(2500*(attempt+1)); continue; }
+    if(!r.ok){
+      const msg = (body && (body.message || body["Error Message"] || body.error)) || ("HTTP " + r.status);
+      throw new ApiError(String(msg), r.status);
+    }
+    if(body && body["Error Message"]){
+      const m = body["Error Message"];
+      throw new ApiError(m, /limit/i.test(m) ? 429 : 402);
+    }
+    return body;
   }
-  if(body && body["Error Message"]) throw new ApiError(body["Error Message"], 402);
-  return body;
 }
 
 /* Variação a partir de uma série [{t: ms, c: close}] em ordem crescente */
@@ -195,15 +206,48 @@ function changesFromSeries(series){
 }
 
 async function pool(items, worker, conc, onTick){
-  let i = 0, done = 0;
+  let i = 0, done = 0, fatal = null;
   const runners = Array.from({length: conc}, async () => {
-    while(i < items.length){
+    while(i < items.length && !fatal){
       const idx = i++;
-      try { await worker(items[idx]); } catch(e){ if(e && e.fatal) throw e; }
+      try { await worker(items[idx]); } catch(e){ if(e && e.fatal) fatal = e; }
       done++; onTick && onTick(done, items.length);
     }
   });
   await Promise.all(runners);
+  if(fatal) throw fatal;
+}
+
+/* Motivo resumido de uma falha */
+const reason = e => !e ? "erro" : e.status===429 ? "limite" : (e.status===402||e.status===403||e.status===400) ? "plano" : e.status===404 ? "não encontrada" : e.status===0 ? "rede" : "erro";
+
+/* Busca incremental: guarda o que já veio hoje e, na próxima vez, só tenta as que faltaram */
+async function loadUniverse(mkt, universe, fetchOne, conc, onTick, extra){
+  const ck = `ad:cache:${mkt}:${today()}`;
+  const cache = store.get(ck) || {ts: Date.now(), rows:{}, fails:{}, ...(extra||{})};
+  cache.fails = cache.fails || {};
+  const missing = universe.filter(tk => !cache.rows[tk] && cache.fails[tk] !== "não encontrada");
+  if(missing.length){
+    const fails = {};
+    try{
+      await pool(missing, async (tk) => {
+        try{
+          const row = await fetchOne(tk, cache);
+          if(row){ cache.rows[tk] = row; delete cache.fails[tk]; }
+          else fails[tk] = "sem dados";
+        }catch(e){
+          if(e.status===401){ e.fatal = true; throw e; }
+          fails[tk] = reason(e);
+        }
+      }, conc, (d)=>onTick && onTick(universe.length - missing.length + d, universe.length));
+    } finally {
+      Object.assign(cache.fails, fails);
+      cache.ts = Date.now();
+      store.set(ck, cache);
+      pruneCache(mkt);
+    }
+  }
+  return cache;
 }
 
 /* ---------------- EUA (FMP) ---------------- */
@@ -216,36 +260,29 @@ async function usDay(key){
   }));
 }
 async function usMulti(key, onTick){
-  const ck = `ad:cache:us:${today()}`;
-  const cached = store.get(ck);
-  if(cached) return cached;
   const from = new Date(Date.now() - 400*864e5).toISOString().slice(0,10);
-  const rows = {};
-  let useFallback = false, fatal = null;
-  await pool(US_UNIVERSE, async (tk) => {
+  const k = encodeURIComponent(key);
+  return loadUniverse("us", US_UNIVERSE, async (tk) => {
+    let firstErr = null;
     try{
-      if(!useFallback){
-        const d = await getJSON(`https://financialmodelingprep.com/stable/historical-price-eod/light?symbol=${tk}&from=${from}&apikey=${encodeURIComponent(key)}`);
-        const arr = Array.isArray(d) ? d : (d && d.historical) || [];
-        const series = arr.map(p => ({t: Date.parse(p.date), c: p.price ?? p.close})).filter(p=>p.c).sort((a,b)=>a.t-b.t);
-        const ch = changesFromSeries(series);
-        if(ch) rows[tk] = {...ch, name: tk};
-        return;
-      }
+      const d = await getJSON(`https://financialmodelingprep.com/stable/historical-price-eod/light?symbol=${tk}&from=${from}&apikey=${k}`);
+      const arr = Array.isArray(d) ? d : (d && d.historical) || [];
+      const series = arr.map(p => ({t: Date.parse(p.date), c: p.price ?? p.close})).filter(p=>p.c).sort((a,b)=>a.t-b.t);
+      const ch = changesFromSeries(series);
+      if(ch) return {...ch, name: US_NAMES[tk] || tk};
     }catch(e){
-      if(e.status===401){ fatal = e; e.fatal = true; throw e; }
-      if(e.status===402 || e.status===403) useFallback = true; else throw e;
+      if(e.status===401 || e.status===429) throw e;
+      firstErr = e;
     }
     // Plano B: variação pronta por período
-    const p = await getJSON(`https://financialmodelingprep.com/stable/stock-price-change?symbol=${tk}&apikey=${encodeURIComponent(key)}`);
-    const o = Array.isArray(p) ? p[0] : p;
-    if(o) rows[tk] = {price:null, name: tk, d:o["1D"], w:o["5D"], m:o["1M"], y:o["1Y"], asOf: Date.now()};
-  }, 4, onTick);
-  if(fatal) throw fatal;
-  const out = {ts: Date.now(), rows};
-  if(Object.keys(rows).length > 10) store.set(ck, out);
-  pruneCache("us");
-  return out;
+    try{
+      const p = await getJSON(`https://financialmodelingprep.com/stable/stock-price-change?symbol=${tk}&apikey=${k}`);
+      const o = Array.isArray(p) ? p[0] : p;
+      if(o) return {price:null, name: US_NAMES[tk] || tk, d:o["1D"], w:o["5D"], m:o["1M"], y:o["1Y"], asOf: Date.now()};
+    }catch(e){ throw firstErr || e; }
+    if(firstErr) throw firstErr;
+    return null;
+  }, 2, onTick);
 }
 
 /* ---------------- Brasil (brapi) ---------------- */
@@ -255,39 +292,30 @@ async function brDay(key){
   return arr.map(x => ({tk: x.stock, name: x.name, price: x.close, pct: x.change, vol: x.volume}));
 }
 async function brMulti(key, onTick){
+  const k = encodeURIComponent(key);
   const ck = `ad:cache:br:${today()}`;
-  const cached = store.get(ck);
-  if(cached) return cached;
-  // descobre se o plano permite 1 ano de histórico
-  let range = "1y", yearOk = true;
-  try { await getJSON(`https://brapi.dev/api/quote/PETR4?range=1y&interval=1d&token=${encodeURIComponent(key)}`); }
-  catch(e){
-    if(e.status===401) throw e;
-    range = "3mo"; yearOk = false;
+  let yearOk = (store.get(ck)||{}).yearOk;
+  if(yearOk === undefined){
+    try { await getJSON(`https://brapi.dev/api/quote/PETR4?range=1y&interval=1d&token=${k}`); yearOk = true; }
+    catch(e){ if(e.status===401) throw e; yearOk = false; }
   }
-  const rows = {};
-  let fatal = null;
-  await pool(BR_UNIVERSE, async (tk) => {
-    try{
-      const d = await getJSON(`https://brapi.dev/api/quote/${tk}?range=${range}&interval=1d&token=${encodeURIComponent(key)}`);
-      const r = d && d.results && d.results[0];
-      if(!r) return;
-      const series = (r.historicalDataPrice||[]).map(p=>({t:p.date*1000, c:p.close})).filter(p=>p.c).sort((a,b)=>a.t-b.t);
-      const ch = changesFromSeries(series) || {};
-      rows[tk] = {
-        name: r.longName || r.shortName || tk,
-        price: r.regularMarketPrice ?? ch.price,
-        d: r.regularMarketChangePercent ?? ch.d,
-        w: ch.w, m: ch.m, y: yearOk ? ch.y : null,
-        vol: r.regularMarketVolume, asOf: ch.asOf
-      };
-    }catch(e){ if(e.status===401){ fatal=e; e.fatal=true; throw e; } }
-  }, 3, onTick);
-  if(fatal) throw fatal;
-  const out = {ts: Date.now(), rows, yearOk};
-  if(Object.keys(rows).length > 10) store.set(ck, out);
-  pruneCache("br");
-  return out;
+  const range = yearOk ? "1y" : "3mo";
+  const cache = await loadUniverse("br", BR_UNIVERSE, async (tk) => {
+    const d = await getJSON(`https://brapi.dev/api/quote/${tk}?range=${range}&interval=1d&token=${k}`);
+    const r = d && d.results && d.results[0];
+    if(!r) return null;
+    const series = (r.historicalDataPrice||[]).map(p=>({t:(p.date>1e12?p.date:p.date*1000), c:p.close})).filter(p=>p.c).sort((a,b)=>a.t-b.t);
+    const ch = changesFromSeries(series) || {};
+    return {
+      name: r.longName || r.shortName || tk,
+      price: r.regularMarketPrice ?? ch.price,
+      d: r.regularMarketChangePercent ?? ch.d,
+      w: ch.w, m: ch.m, y: yearOk ? ch.y : null,
+      vol: r.regularMarketVolume, asOf: ch.asOf
+    };
+  }, 2, onTick, {yearOk});
+  cache.yearOk = yearOk;
+  return cache;
 }
 
 function pruneCache(mkt){
@@ -295,6 +323,17 @@ function pruneCache(mkt){
     const keep = `ad:cache:${mkt}:${today()}`;
     Object.keys(localStorage).filter(k => k.startsWith(`ad:cache:${mkt}:`) && k!==keep).forEach(k=>localStorage.removeItem(k));
   }catch(e){}
+}
+
+/* Resumo do que carregou e do que faltou */
+function coverageNotice(data, universe, prov){
+  const got = universe.filter(tk => data.rows[tk]).length;
+  if(got >= universe.length) return "";
+  const counts = {};
+  universe.forEach(tk => { if(!data.rows[tk]){ const r = (data.fails||{})[tk] || "erro"; counts[r] = (counts[r]||0)+1; } });
+  const label = {"limite":"bateram no limite de consultas da "+prov+" (tente ↻ Atualizar daqui a alguns minutos)","plano":"não são liberadas no plano grátis da "+prov,"não encontrada":"não foram encontradas (ticker antigo ou mudou de código)","rede":"falharam por problema de conexão","sem dados":"vieram sem histórico","erro":"deram outro erro"};
+  const parts = Object.entries(counts).map(([r,n]) => `<b>${n}</b> ${label[r]||r}`);
+  return `<div class="notice">Carregadas <b>${got}</b> de ${universe.length} ações. ${parts.join("; ")}.</div>`;
 }
 
 /* ---------------- Render ---------------- */
@@ -345,10 +384,8 @@ async function load(force){
     renderState(`Falta a chave ${mkt==="us"?"da <b>Financial Modeling Prep</b>":"da <b>brapi.dev</b>"}.<br><br><button class="btn primary" onclick="document.getElementById('openSettings').click()">⚙️ Colar chave</button>`);
     return;
   }
-  if(force){
-    store.del(`ad:cache:${mkt}:${today()}`);
-    store.del(`ad:day:${mkt}`);
-  }
+  // ↻ Atualizar: refaz a lista do dia; nas outras visões tenta de novo só as ações que faltaram
+  if(force) store.del(`ad:day:${mkt}`);
   try{
     let rows, cur = mkt==="us" ? "USD" : "BRL", ts;
     if(per==="d"){
@@ -381,6 +418,7 @@ async function load(force){
         $("#updated").textContent = "";
         return;
       }
+      $("#notice").innerHTML = coverageNotice(data, mkt==="us"?US_UNIVERSE:BR_UNIVERSE, mkt==="us"?"FMP":"brapi");
       rows = Object.entries(data.rows)
         .map(([tk,r]) => ({tk, name:r.name, price:r.price, pct:r[per], vol:r.vol}))
         .filter(r => typeof r.pct === "number" && isFinite(r.pct));
